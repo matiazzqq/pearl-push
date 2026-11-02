@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DEEP ABYSS: Pearl Push</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#001830;
+  overflow:hidden;
+  font-family:'Segoe UI',Arial,sans-serif;
+  color:#fff;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+canvas{display:block}
+
+#ui{
+  position:absolute;inset:0;
+  pointer-events:none;
+  z-index:10;
+  display:flex;flex-direction:column;
+  justify-content:space-between;
+  padding:14px;
+}
+.top-bar{
+  display:flex;justify-content:space-between;
+  flex-wrap:wrap;gap:8px;
+}
+.stat{
+  background:rgba(0,20,40,.7);
+  border:1px solid rgba(0,229,255,.3);
+  padding:8px 14px;
+  border-radius:10px;
+  font-size:15px;font-weight:bold;
+  backdrop-filter:blur(5px);
+}
+.stat span{color:#00e5ff}
+
+#padWrap{
+  position:absolute;right:18px;bottom:18px;
+  display:grid;
+  grid-template-columns:56px 56px 56px;
+  grid-template-rows:56px 56px 56px;
+  gap:6px;
+  pointer-events:auto;
+  z-index:20;
+}
+.pad{
+  border-radius:12px;
+  border:2px solid rgba(0,229,255,.4);
+  background:rgba(0,30,50,.5);
+  color:#00e5ff;
+  font-size:22px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+.pad:active{background:rgba(0,229,255,.3)}
+.pad.up{grid-column:2;grid-row:1}
+.pad.left{grid-column:1;grid-row:2}
+.pad.right{grid-column:3;grid-row:2}
+.pad.down{grid-column:2;grid-row:3}
+#btnReset{
+  position:absolute;left:18px;bottom:18px;
+  padding:12px 20px;border-radius:12px;
+  border:2px solid rgba(255,180,80,.5);
+  background:rgba(50,30,0,.5);
+  color:#ffb450;font-weight:bold;font-size:14px;
+  cursor:pointer;pointer-events:auto;z-index:20;
+}
+
+.menu{
+  position:absolute;inset:0;
+  z-index:100;
+  background:radial-gradient(circle at 50% 40%, rgba(0,40,70,.75), rgba(0,10,25,.96) 70%);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;padding:24px;
+  pointer-events:auto;
+  visibility:visible;opacity:1;
+  transition:opacity .25s;
+}
+.hidden{
+  visibility:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
+h1{
+  font-size:min(12vw,58px);
+  letter-spacing:3px;color:#fff;
+  text-shadow:0 0 20px rgba(0,229,255,.6),0 0 50px rgba(248,187,208,.4);
+  margin-bottom:10px;
+}
+p{color:#a0d8e8;font-size:16px;line-height:1.6;margin-bottom:24px;max-width:540px}
+.btn{
+  padding:15px 45px;font-size:20px;font-weight:900;
+  border:none;outline:none;border-radius:999px;
+  color:#002030;
+  background:linear-gradient(135deg,#00e5ff,#f8bbd0);
+  box-shadow:0 10px 30px rgba(0,229,255,.35);
+  cursor:pointer;transition:transform .18s;
+  pointer-events:auto;
+}
+.btn:hover{transform:scale(1.04)}
+.final-score{font-size:40px;color:#f8bbd0;margin:16px 0}
+.stats-list{list-style:none;margin:0 0 22px;font-size:17px;color:#a0d8e8}
+.stats-list li{margin:6px 0}
+.stats-list span{color:#00e5ff;font-weight:900}
+.hint{margin-top:18px;font-size:13px;color:#5a8a9a}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui">
+  <div class="top-bar">
+    <div class="stat">Уровень: <span id="lvlVal">1/50</span></div>
+    <div class="stat">Ходы: <span id="moveVal">0</span></div>
+    <div class="stat">💎 <span id="doneVal">0/0</span></div>
+  </div>
+</div>
+
+<div id="padWrap">
+  <button class="pad up" data-dir="up">▲</button>
+  <button class="pad left" data-dir="left">◀</button>
+  <button class="pad right" data-dir="right">▶</button>
+  <button class="pad down" data-dir="down">▼</button>
+</div>
+<button id="btnReset">↺ Заново</button>
+
+<div id="startMenu" class="menu">
+  <h1>PEARL PUSH</h1>
+  <p>
+    Подводный сокобан в глубинах DEEP ABYSS.<br><br>
+    <b>50 уровней!</b> Толкай жемчужины в раковины-цели.<br>
+    Жемчужину можно толкнуть, только если за ней пусто.<br>
+    Не загони себя в тупик — иначе жми «Заново».<br><br>
+    Стрелки / WASD — шаг. R — рестарт.
+  </p>
+  <button class="btn" id="btnStart">НАЧАТЬ ПОГРУЖЕНИЕ</button>
+  <div class="hint">Уровни 1-6 обучают, дальше — процедурные головоломки.</div>
+</div>
+
+<div id="winMenu" class="menu hidden">
+  <h1>РАКОВИНЫ ЗАКРЫТЫ</h1>
+  <div class="final-score" id="winMoves">0 ходов</div>
+  <ul class="stats-list">
+    <li>Уровень: <span id="winLvl">1</span></li>
+    <li>Всего ходов: <span id="winTotal">0</span></li>
+  </ul>
+  <button class="btn" id="btnNext">СЛЕДУЮЩИЙ УРОВЕНЬ</button>
+</div>
+
+<div id="finalMenu" class="menu hidden">
+  <h1>ВСЕ 50 УРОВНЕЙ ПРОЙДЕНЫ</h1>
+  <p>Ты мастер подводного сокобана!</p>
+  <div class="final-score" id="finalMoves">0</div>
+  <button class="btn" id="btnAgain">ИГРАТЬ СНОВА</button>
+</div>
+
+<script>
+// ==== AUDIO ====
+let audioCtx=null;
+function initAudio(){
+  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();
+}
+function tone(freq,type,dur,vol,delay){
+  if(!audioCtx)return;
+  delay=delay||0;
+  const t=audioCtx.currentTime+delay;
+  const o=audioCtx.createOscillator();
+  const g=audioCtx.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,t);
+  g.gain.setValueAtTime(vol,t);
+  g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g);g.connect(audioCtx.destination);
+  o.start(t);o.stop(t+dur+0.05);
+}
+const SFX={
+  step(){tone(300,'sine',0.05,0.04)},
+  push(){tone(200,'sine',0.08,0.07);tone(260,'sine',0.08,0.05,0.04)},
+  block(){tone(120,'sawtooth',0.1,0.06)},
+  place(){tone(800,'sine',0.12,0.09);tone(1200,'sine',0.15,0.07,0.07)},
+  win(){[523,659,784,1046].forEach((f,i)=>tone(f,'triangle',0.25,0.09,i*0.1))},
+  final(){[523,659,784,1046,1318,1568].forEach((f,i)=>tone(f,'triangle',0.3,0.09,i*0.12))}
+};
+
+// ==== CANVAS ====
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const PI2=Math.PI*2;
+let W=0,H=0;
+function resize(){
+  W=window.innerWidth;H=window.innerHeight;
+  canvas.width=W;canvas.height=H;
+  computeLayout();
+}
+window.addEventListener('resize',resize);
+
+// ==== DOM ====
+const lvlVal=document.getElementById('lvlVal');
+const moveVal=document.getElementById('moveVal');
+const doneVal=document.getElementById('doneVal');
+const startMenu=document.getElementById('startMenu');
+const winMenu=document.getElementById('winMenu');
+const finalMenu=document.getElementById('finalMenu');
+const btnStart=document.getElementById('btnStart');
+const btnNext=document.getElementById('btnNext');
+const btnAgain=document.getElementById('btnAgain');
+const btnReset=document.getElementById('btnReset');
+const winMoves=document.getElementById('winMoves');
+const winLvl=document.getElementById('winLvl');
+const winTotal=document.getElementById('winTotal');
+const finalMoves=document.getElementById('finalMoves');
+
+// ==== КОНФИГ ====
+const TOTAL_LEVELS=50;
+const MANUAL_COUNT=6;
+
+// ==== РУЧНЫЕ УРОВНИ (1-6) ====
+// # стена, . пол, O цель, $ жемчужина, @ игрок
+const MANUAL=[
+  ['######','#....#','#.@$O#','#....#','######'],
+  ['#######','#.@...#','#.$.$.#','#.O.O.#','#.....#','#######'],
+  ['#######','#.@...#','#..$..#','#..O..#','#.$...#','#.O...#','#######'],
+  ['########','#..#...#','#@$..O.#','#..#...#','#.$..O.#','#..#...#','########'],
+  ['#########','#...#...#','#@$..O..#','#...#...#','#.$...O.#','#...#...#','#.$..O..#','#...#...#','#########'],
+  ['#########','#.@.....#','#.$.$.$.#','#.O.O.O.#','#.......#','#########']
+];
+
+// ==== SEEDED RNG ====
+function mulberry32(a){
+  return function(){
+    a|=0;a=a+0x6D2B79F5|0;
+    let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return((t^t>>>14)>>>0)/4294967296;
+  };
+}
+
+// ==== ГЕНЕРАТОР УРОВНЯ (обратные ходы => гарантированная решаемость) ====
+function generateLevelOnce(idx,attempt){
+  const rnd=mulberry32(idx*7919+attempt*104729+13);
+  const span=TOTAL_LEVELS-1-MANUAL_COUNT;
+  const t=Math.max(0,Math.min(1,(idx-MANUAL_COUNT)/span));
+
+  const cols=Math.min(12,7+Math.floor(t*5));
+  const rows=Math.min(10,6+Math.floor(t*4));
+  const pearlTarget=Math.max(1,Math.min(4,1+Math.floor(t*3)+(rnd()<0.4?1:0)));
+  const wallTarget=1+Math.floor(t*6);
+  const pulls=10+Math.floor(t*26);
+
+  // сетка
+  const grid=[];
+  for(let r=0;r<rows;r++){
+    grid[r]=[];
+    for(let c=0;c<cols;c++){
+      const border=(r===0||c===0||r===rows-1||c===cols-1);
+      grid[r][c]=border?1:0;
+    }
+  }
+  // внутренние стены
+  let placed=0,guard=0;
+  while(placed<wallTarget&&guard<300){
+    guard++;
+    const r=1+Math.floor(rnd()*(rows-2));
+    const c=1+Math.floor(rnd()*(cols-2));
+    if(grid[r][c]===0){grid[r][c]=1;placed++;}
+  }
+  // цели
+  const goals=[];
+  guard=0;
+  while(goals.length<pearlTarget&&guard<600){
+    guard++;
+    const r=1+Math.floor(rnd()*(rows-2));
+    const c=1+Math.floor(rnd()*(cols-2));
+    if(grid[r][c]===0&&!goals.some(g=>g.r===r&&g.c===c)){
+      goals.push({r:r,c:c});
+      grid[r][c]=2;
+    }
+  }
+  if(goals.length===0)return null;
+
+  const pearls=goals.map(g=>({r:g.r,c:g.c}));
+
+  // игрок на свободной клетке
+  let pr=1,pc=1,ok=false;
+  guard=0;
+  while(!ok&&guard<600){
+    guard++;
+    pr=1+Math.floor(rnd()*(rows-2));
+    pc=1+Math.floor(rnd()*(cols-2));
+    if(grid[pr][pc]!==1&&!pearls.some(p=>p.r===pr&&p.c===pc))ok=true;
+  }
+  if(!ok)return null;
+  const player={r:pr,c:pc};
+
+  // helpers
+  function wallAt(r,c){
+    if(r<0||r>=rows||c<0||c>=cols)return true;
+    return grid[r][c]===1;
+  }
+  function pearlAtLoc(r,c){
+    return pearls.find(p=>p.r===r&&p.c===c);
+  }
+
+  // обратные ходы (pull): игрок движется в m, тянет жемчужину с (Q-m) на Q
+  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+  let applied=0,tries=0;
+  const maxTries=pulls*30;
+  while(applied<pulls&&tries<maxTries){
+    tries++;
+    const m=dirs[Math.floor(rnd()*4)];
+    const behindR=player.r-m[0],behindC=player.c-m[1];
+    const frontR=player.r+m[0],frontC=player.c+m[1];
+    const pearl=pearlAtLoc(behindR,behindC);
+    if(!pearl)continue;
+    if(wallAt(frontR,frontC))continue;
+    if(pearlAtLoc(frontR,frontC))continue;
+    // применяем pull
+    pearl.r=player.r;pearl.c=player.c;
+    player.r=frontR;player.c=frontC;
+    applied++;
+  }
+
+  // проверка валидности
+  const allOn=pearls.every(p=>grid[p.r][p.c]===2);
+  if(allOn)return null; // тривиальный, перегенерируем
+  return{grid:grid,rows:rows,cols:cols,pearls:pearls,player:player};
+}
+
+function generateLevel(idx){
+  for(let attempt=0;attempt<30;attempt++){
+    const g=generateLevelOnce(idx,attempt);
+    if(g)return g;
+  }
+  // крайний fallback: простой уровень
+  return{
+    grid:[
+      [1,1,1,1,1,1],
+      [1,0,0,0,0,1],
+      [1,0,0,2,0,1],
+      [1,0,0,0,0,1],
+      [1,1,1,1,1,1]
+    ],
+    rows:5,cols:6,
+    pearls:[{r:2,c:2}],
+    player:{r:1,c:1}
+  };
+}
+
+// ==== STATE ====
+const game={
+  playing:false,rafId:null,lastTime:0,frame:0,
+  level:0,moves:0,totalMoves:0,
+  grid:[],rows:0,cols:0,
+  pearls:[],player:null,
+  cell:0,offX:0,offY:0,
+  bubbles:[]
+};
+
+// ==== LOAD LEVEL ====
+function loadLevel(idx){
+  let data;
+  if(idx<MANUAL_COUNT){
+    // ручная карта
+    const map=MANUAL[idx];
+    const rows=map.length,cols=map[0].length;
+    const grid=[];const pearls=[];let player=null;
+    for(let r=0;r<rows;r++){
+      grid[r]=[];
+      for(let c=0;c<cols;c++){
+        const ch=map[r][c];
+        if(ch==='#')grid[r][c]=1;
+        else if(ch==='O')grid[r][c]=2;
+        else grid[r][c]=0;
+        if(ch==='$')pearls.push({r:r,c:c});
+        if(ch==='@')player={r:r,c:c};
+      }
+    }
+    data={grid:grid,rows:rows,cols:cols,pearls:pearls,player:player};
+  }else{
+    data=generateLevel(idx);
+  }
+
+  game.grid=data.grid;
+  game.rows=data.rows;
+  game.cols=data.cols;
+  game.pearls=data.pearls;
+  game.player=data.player;
+  game.moves=0;
+
+  computeLayout();
+  updateHUD();
+}
+
+function computeLayout(){
+  if(game.rows===0)return;
+  const maxW=W*0.9;
+  const maxH=H*0.72;
+  const cell=Math.floor(Math.min(maxW/game.cols,maxH/game.rows));
+  game.cell=cell;
+  game.offX=(W-cell*game.cols)/2;
+  game.offY=(H-cell*game.rows)/2;
+}
+
+function cellXY(r,c){
+  return{x:game.offX+c*game.cell,y:game.offY+r*game.cell};
+}
+
+// ==== LOGIC ====
+function pearlAt(r,c){
+  return game.pearls.find(p=>p.r===r&&p.c===c);
+}
+function isGoal(r,c){
+  return game.grid[r]&&game.grid[r][c]===2;
+}
+function isWall(r,c){
+  if(r<0||r>=game.rows||c<0||c>=game.cols)return true;
+  return game.grid[r][c]===1;
+}
+
+function tryMove(dr,dc){
+  if(!game.playing)return;
+  const p=game.player;
+  const nr=p.r+dr,nc=p.c+dc;
+
+  if(isWall(nr,nc)){SFX.block();return}
+
+  const pearl=pearlAt(nr,nc);
+  if(pearl){
+    const br=nr+dr,bc=nc+dc;
+    if(isWall(br,bc)||pearlAt(br,bc)){SFX.block();return}
+    pearl.r=br;pearl.c=bc;
+    SFX.push();
+    if(isGoal(br,bc))SFX.place();
+  }else{
+    SFX.step();
+  }
+
+  p.r=nr;p.c=nc;
+  game.moves++;
+  updateHUD();
+  checkWin();
+}
+
+function checkWin(){
+  const allOn=game.pearls.every(p=>isGoal(p.r,p.c));
+  if(!allOn)return;
+
+  game.playing=false;
+  game.totalMoves+=game.moves;
+
+  if(game.level>=TOTAL_LEVELS-1){
+    SFX.final();
+    finalMoves.textContent=game.totalMoves+' ходов всего';
+    setTimeout(()=>finalMenu.classList.remove('hidden'),500);
+  }else{
+    SFX.win();
+    winMoves.textContent=game.moves+' ходов';
+    winLvl.textContent=game.level+1;
+    winTotal.textContent=game.totalMoves;
+    setTimeout(()=>winMenu.classList.remove('hidden'),500);
+  }
+}
+
+// ==== HUD ====
+function updateHUD(){
+  lvlVal.textContent=(game.level+1)+'/'+TOTAL_LEVELS;
+  moveVal.textContent=game.moves;
+  const on=game.pearls.filter(p=>isGoal(p.r,p.c)).length;
+  doneVal.textContent=on+'/'+game.pearls.length;
+}
+
+// ==== DRAW ====
+function drawBackground(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0a4a6e');g.addColorStop(0.5,'#053050');g.addColorStop(1,'#000a18');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  for(const b of game.bubbles){
+    ctx.strokeStyle='rgba(150,220,240,.2)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,PI2);ctx.stroke();
+  }
+}
+
+function drawTile(r,c){
+  const t=game.grid[r][c];
+  const pos=cellXY(r,c);
+  const s=game.cell;
+
+  if(t===1){
+    ctx.fillStyle='#12324a';
+    ctx.fillRect(pos.x,pos.y,s,s);
+    ctx.strokeStyle='#1e4a66';
+    ctx.lineWidth=2;
+    ctx.strokeRect(pos.x+2,pos.y+2,s-4,s-4);
+    ctx.strokeStyle='rgba(0,229,255,.08)';
+    ctx.beginPath();
+    ctx.moveTo(pos.x+6,pos.y+s*0.4);ctx.lineTo(pos.x+s-6,pos.y+s*0.4);
+    ctx.moveTo(pos.x+6,pos.y+s*0.7);ctx.lineTo(pos.x+s-6,pos.y+s*0.7);
+    ctx.stroke();
+  }else{
+    ctx.fillStyle='rgba(120,110,80,.18)';
+    ctx.fillRect(pos.x,pos.y,s,s);
+    ctx.strokeStyle='rgba(255,255,255,.04)';
+    ctx.strokeRect(pos.x,pos.y,s,s);
+  }
+
+  if(t===2){
+    const cx=pos.x+s/2,cy=pos.y+s/2;
+    const occupied=pearlAt(r,c);
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.fillStyle=occupied?'rgba(248,187,208,.35)':'rgba(248,187,208,.6)';
+    ctx.shadowBlur=occupied?0:10;
+    ctx.shadowColor='#f8bbd0';
+    ctx.beginPath();
+    ctx.moveTo(0,s*0.22);
+    ctx.lineTo(-s*0.26,-s*0.14);
+    ctx.lineTo(-s*0.13,-s*0.24);
+    ctx.lineTo(0,-s*0.16);
+    ctx.lineTo(s*0.13,-s*0.24);
+    ctx.lineTo(s*0.26,-s*0.14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.restore();
+  }
+}
+
+function drawPearl(p){
+  const s=game.cell;
+  const target=cellXY(p.r,p.c);
+  const tx=target.x+s/2,ty=target.y+s/2;
+  if(p.px===undefined){p.px=tx;p.py=ty}
+  p.px+=(tx-p.px)*0.3;
+  p.py+=(ty-p.py)*0.3;
+
+  const on=isGoal(p.r,p.c);
+  ctx.save();
+  ctx.translate(p.px,p.py);
+  ctx.shadowBlur=on?18:10;
+  ctx.shadowColor=on?'#ffd700':'#e0f7fa';
+  ctx.fillStyle=on?'#ffe082':'#e0f7fa';
+  ctx.beginPath();ctx.arc(0,0,s*0.26,0,PI2);ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(255,255,255,.8)';
+  ctx.beginPath();ctx.arc(-s*0.08,-s*0.08,s*0.08,0,PI2);ctx.fill();
+  ctx.restore();
+}
+
+function drawPlayer(){
+  const s=game.cell;
+  const p=game.player;
+  const target=cellXY(p.r,p.c);
+  const tx=target.x+s/2,ty=target.y+s/2;
+  if(p.px===undefined){p.px=tx;p.py=ty}
+  p.px+=(tx-p.px)*0.3;
+  p.py+=(ty-p.py)*0.3;
+
+  ctx.save();
+  ctx.translate(p.px,p.py);
+  ctx.fillStyle='#01579b';
+  ctx.beginPath();ctx.ellipse(0,s*0.05,s*0.26,s*0.2,0,0,PI2);ctx.fill();
+  ctx.fillStyle='#0277bd';
+  ctx.beginPath();ctx.arc(0,-s*0.16,s*0.16,0,PI2);ctx.fill();
+  ctx.fillStyle='#80d8ff';
+  ctx.beginPath();ctx.arc(0,-s*0.16,s*0.1,0,PI2);ctx.fill();
+  ctx.fillStyle='#003050';
+  ctx.beginPath();ctx.arc(s*0.03,-s*0.16,s*0.04,0,PI2);ctx.fill();
+  ctx.fillStyle='#ffb300';
+  ctx.beginPath();
+  if(ctx.roundRect)ctx.roundRect(-s*0.3,-s*0.1,s*0.1,s*0.24,3);
+  else ctx.rect(-s*0.3,-s*0.1,s*0.1,s*0.24);
+  ctx.fill();
+  ctx.restore();
+}
+
+function updateBubbles(dt){
+  if(game.frame%25===0){
+    game.bubbles.push({x:Math.random()*W,y:H+10,r:2+Math.random()*4,s:0.6+Math.random()});
+  }
+  for(let i=game.bubbles.length-1;i>=0;i--){
+    const b=game.bubbles[i];
+    b.y-=b.s*dt*60;
+    if(b.y<-10)game.bubbles.splice(i,1);
+  }
+}
+
+function draw(){
+  drawBackground();
+  for(let r=0;r<game.rows;r++)
+    for(let c=0;c<game.cols;c++)
+      drawTile(r,c);
+  for(const p of game.pearls)drawPearl(p);
+  drawPlayer();
+}
+
+// ==== LOOP ====
+function loop(now){
+  if(!game.playing){
+    draw();
+    return;
+  }
+  let dt=(now-game.lastTime)/1000;
+  if(!isFinite(dt)||dt<0)dt=0;
+  if(dt>0.05)dt=0.05;
+  game.lastTime=now;
+  game.frame++;
+  try{
+    updateBubbles(dt);
+    draw();
+  }catch(err){
+    ctx.fillStyle='#ff5555';ctx.font='16px Courier New';ctx.textAlign='center';
+    ctx.fillText('ERROR: '+err.message,W/2,H/2);
+    return;
+  }
+  game.rafId=requestAnimationFrame(loop);
+}
+
+function startLoop(){
+  if(game.rafId)cancelAnimationFrame(game.rafId);
+  game.lastTime=performance.now();
+  game.rafId=requestAnimationFrame(loop);
+}
+
+// ==== FLOW ====
+function startGame(){
+  initAudio();
+  btnStart.blur();btnNext.blur();btnAgain.blur();
+  startMenu.classList.add('hidden');
+  winMenu.classList.add('hidden');
+  finalMenu.classList.add('hidden');
+  game.level=0;
+  game.totalMoves=0;
+  game.bubbles=[];
+  resize();
+  loadLevel(0);
+  game.playing=true;
+  startLoop();
+}
+
+function nextLevel(){
+  btnNext.blur();
+  winMenu.classList.add('hidden');
+  game.level++;
+  loadLevel(game.level);
+  game.playing=true;
+  startLoop();
+}
+
+function restartLevel(){
+  btnReset.blur();
+  loadLevel(game.level);
+  game.playing=true;
+  startLoop();
+}
+
+// ==== INPUT ====
+window.addEventListener('keydown',function(e){
+  if(e.code==='Space')e.preventDefault();
+  if(e.code==='KeyR'){restartLevel();return}
+  if(!game.playing)return;
+  if(e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();tryMove(-1,0)}
+  else if(e.code==='ArrowDown'||e.code==='KeyS'){e.preventDefault();tryMove(1,0)}
+  else if(e.code==='ArrowLeft'||e.code==='KeyA'){e.preventDefault();tryMove(0,-1)}
+  else if(e.code==='ArrowRight'||e.code==='KeyD'){e.preventDefault();tryMove(0,1)}
+});
+
+document.querySelectorAll('.pad').forEach(function(b){
+  function fire(e){
+    e.preventDefault();
+    const d=b.dataset.dir;
+    if(d==='up')tryMove(-1,0);
+    else if(d==='down')tryMove(1,0);
+    else if(d==='left')tryMove(0,-1);
+    else if(d==='right')tryMove(0,1);
+  }
+  b.addEventListener('touchstart',fire,{passive:false});
+  b.addEventListener('mousedown',fire);
+});
+
+btnReset.addEventListener('click',restartLevel);
+btnStart.addEventListener('click',startGame);
+btnNext.addEventListener('click',nextLevel);
+btnAgain.addEventListener('click',startGame);
+
+resize();
+drawBackground();
+</script>
+</body>
+</html>
